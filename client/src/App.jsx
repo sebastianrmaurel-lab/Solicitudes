@@ -19,19 +19,14 @@ const AREAS = {
   ctrl: { name: 'Control y Seguimiento', color: '#8b5cf6' },
 };
 
-function Sidebar({ user, profile }) {
+function Sidebar({ profile }) {
   const location = useLocation();
-  const active = (p) => location.pathname.startsWith(p) ? 'active' : '';
-
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = '/login';
-  };
+  const active = (p) => location.pathname.startsWith(p);
 
   return (
     <aside style={styles.sidebar}>
       <div style={styles.logo}>
-        <span style={styles.logoIcon}>📋</span>
+        <span style={{ fontSize: 24 }}>📋</span>
         <span style={styles.logoText}>Portal</span>
       </div>
       {profile?.area && (
@@ -48,23 +43,25 @@ function Sidebar({ user, profile }) {
       </nav>
       <div style={styles.sidebarFooter}>
         <div style={styles.userInfo}>
-          <div style={styles.userAvatar}>{profile?.full_name?.[0] || user?.email?.[0]}</div>
+          <div style={styles.userAvatar}>{profile?.full_name?.[0] || '?'}</div>
           <div>
             <div style={styles.userName}>{profile?.full_name || 'Usuario'}</div>
             <div style={styles.userRole}>{profile?.role}</div>
           </div>
         </div>
-        <button onClick={handleSignOut} style={styles.signOutBtn}>Cerrar sesión</button>
+        <button onClick={async () => { await signOut(); window.location.href = '/login'; }} style={styles.signOutBtn}>
+          Cerrar sesión
+        </button>
       </div>
     </aside>
   );
 }
 
 function Layout({ children }) {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   return (
-    <div style={styles.layout}>
-      <Sidebar user={user} profile={profile} />
+    <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <Sidebar profile={profile} />
       <main style={styles.main}>{children}</main>
     </div>
   );
@@ -72,29 +69,26 @@ function Layout({ children }) {
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div style={styles.loading}>Cargando...</div>;
+  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontSize:18,color:'#64748b' }}>Cargando...</div>;
   if (!user) return <Navigate to="/login" />;
   return <Layout>{children}</Layout>;
 }
 
 const styles = {
-  layout: { display: 'flex', minHeight: '100vh' },
   sidebar: { width: 240, background: '#1e3a5f', color: '#fff', display: 'flex', flexDirection: 'column', padding: '24px 0', position: 'fixed', top: 0, left: 0, height: '100vh' },
   logo: { display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' },
-  logoIcon: { fontSize: 24 },
-  logoText: { fontSize: 18, fontWeight: 700, color: '#fff' },
+  logoText: { fontSize: 18, fontWeight: 700 },
   areaBadge: { margin: '16px', padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600, textAlign: 'center' },
   nav: { flex: 1, padding: '16px 0' },
-  navLink: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', color: 'rgba(255,255,255,0.7)', fontSize: 14, transition: 'all 0.2s' },
+  navLink: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', color: 'rgba(255,255,255,0.7)', fontSize: 14 },
   navActive: { color: '#fff', background: 'rgba(255,255,255,0.1)', borderRight: '3px solid #60a5fa' },
   sidebarFooter: { padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.1)' },
   userInfo: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 },
   userAvatar: { width: 36, height: 36, borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, textTransform: 'uppercase' },
-  userName: { fontSize: 13, fontWeight: 600, color: '#fff' },
+  userName: { fontSize: 13, fontWeight: 600 },
   userRole: { fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'capitalize' },
-  signOutBtn: { width: '100%', padding: '8px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  signOutBtn: { width: '100%', padding: 8, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 6, color: 'rgba(255,255,255,0.7)', fontSize: 13, cursor: 'pointer' },
   main: { flex: 1, marginLeft: 240, padding: 32, minHeight: '100vh' },
-  loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontSize: 18, color: '#64748b' },
 };
 
 export default function App() {
@@ -107,11 +101,11 @@ export default function App() {
       try {
         const session = await getSession();
         if (session) {
-          setUser(session.user);
           const p = await api.get('/profile');
+          setUser(p);
           setProfile(p);
         }
-      } catch {}
+      } catch { localStorage.removeItem('sb-token'); }
       setLoading(false);
     })();
   }, []);

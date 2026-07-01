@@ -5,23 +5,9 @@ services:
     rootDir: server
     buildCommand: npm install
     startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: CLIENT_URL
-        sync: false
 
   - type: web
     name: solicitudes-frontend
     runtime: static
     buildCommand: cd client && npm install && npm run build
     staticPublishPath: ./client/dist
-    envVars:
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_ANON_KEY
-        sync: false

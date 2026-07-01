@@ -20,8 +20,7 @@ export default function Login() {
     try {
       const data = await signIn(email, password);
       setUser(data.user);
-      const profile = await api.get('/profile');
-      setProfile(profile);
+      setProfile(data.user);
       navigate('/dashboard');
     } catch (err) {
       setError('Credenciales incorrectas. Intenta nuevamente.');
@@ -34,7 +33,7 @@ export default function Login() {
     <div style={s.page}>
       <div style={s.card}>
         <div style={s.header}>
-          <span style={s.icon}>📋</span>
+          <span style={{ fontSize: 48 }}>📋</span>
           <h1 style={s.title}>Portal de Solicitudes</h1>
           <p style={s.subtitle}>Ingresa con tus credenciales</p>
         </div>
@@ -46,13 +45,18 @@ export default function Login() {
           </div>
           <div style={s.field}>
             <label style={s.label}>Contraseña</label>
-            <div style={s.passWrap}>
+            <div style={{ position: 'relative' }}>
               <input style={{ ...s.input, paddingRight: 44 }} type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
               <button type="button" onClick={() => setShowPass(!showPass)} style={s.eyeBtn}>{showPass ? '🙈' : '👁️'}</button>
             </div>
           </div>
           <button type="submit" style={s.btn} disabled={loading}>{loading ? 'Ingresando...' : 'Ingresar'}</button>
         </form>
+        <div style={s.hint}>
+          <strong>Usuarios de prueba:</strong><br/>
+          admin@empresa.com / admin123<br/>
+          user@empresa.com / user123
+        </div>
       </div>
     </div>
   );
@@ -62,15 +66,14 @@ const s = {
   page: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)' },
   card: { background: '#fff', borderRadius: 16, padding: 40, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
   header: { textAlign: 'center', marginBottom: 32 },
-  icon: { fontSize: 48 },
   title: { fontSize: 24, fontWeight: 700, color: '#1e3a5f', margin: '12px 0 4px' },
   subtitle: { color: '#64748b', fontSize: 14 },
   form: { display: 'flex', flexDirection: 'column', gap: 16 },
   error: { background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 14, border: '1px solid #fecaca' },
   field: { display: 'flex', flexDirection: 'column', gap: 6 },
   label: { fontSize: 13, fontWeight: 600, color: '#374151' },
-  input: { padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%' },
-  passWrap: { position: 'relative' },
+  input: { padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box' },
   eyeBtn: { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: 16, cursor: 'pointer' },
-  btn: { marginTop: 8, padding: '12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600 },
+  btn: { marginTop: 8, padding: 12, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
+  hint: { marginTop: 20, padding: 12, background: '#f8fafc', borderRadius: 8, fontSize: 12, color: '#64748b', lineHeight: 1.6, textAlign: 'center' },
 };
