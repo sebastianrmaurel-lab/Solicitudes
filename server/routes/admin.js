@@ -1,47 +1,90 @@
 import { Router } from 'express';
-import { supabase, requireAuth, requireAdmin } from '../index.js';
+import { supabaseAdmin, requireAuth, requireAdmin } from '../index.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
-// Listar todos los usuarios
 router.get('/users', async (req, res) => {
-  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { data, error } = await supabaseAdmin.from('profiles').select('*').order('created_at');
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Cambiar rol de usuario
-router.patch('/users/:id/role', async (req, res) => {
-  const { role } = req.body;
-  if (!['user', 'admin', 'agent'].includes(role)) return res.status(400).json({ error: 'Rol inválido' });
-  const { data, error } = await supabase.from('profiles').update({ role }).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+router.post('/users', async (req, res) => {
+  try {
+    const { email, password, full_name, role, area } = req.body;
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email, password, email_confirm: true,
+      user_metadata: { full_name }
+    });
+    if (authError) throw authError;
+    await supabaseAdmin.from('profiles').update({ role, area, full_name }).eq('id', authData.user.id);
+    res.status(201).json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// Categorías CRUD
+router.patch('/users/:id', async (req, res) => {
+  try {
+    const { role, area, full_name, active } = req.body;
+    const updates = {};
+    if (role !== undefined) updates.role = role;
+    if (area !== undefined) updates.area = area;
+    if (full_name !== undefined) updates.full_name = full_name;
+    if (active !== undefined) updates.active = active;
+    const { data, error } = await supabaseAdmin.from('profiles').update(updates).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/categories', async (req, res) => {
-  const { data } = await supabase.from('categories').select('*').order('name');
-  res.json(data);
+  try {
+    const { data, error } = await supabaseAdmin.from('categories').select('*').order('area').order('name');
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/categories', async (req, res) => {
-  const { name, description, color, icon } = req.body;
-  const { data, error } = await supabase.from('categories').insert({ name, description, color, icon }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.status(201).json(data);
+  try {
+    const { name, area, description } = req.body;
+    const { data, error } = await supabaseAdmin.from('categories').insert({ name, area, description }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.patch('/categories/:id', async (req, res) => {
-  const { data, error } = await supabase.from('categories').update(req.body).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { name, area, description, active } = req.body;
+    const { data, error } = await supabaseAdmin.from('categories').update({ name, area, description, active }).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.delete('/categories/:id', async (req, res) => {
-  await supabase.from('categories').delete().eq('id', req.params.id);
-  res.json({ success: true });
+  try {
+    const { error } = await supabaseAdmin.from('categories').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 export default router;

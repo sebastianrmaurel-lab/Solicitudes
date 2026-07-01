@@ -1,175 +1,152 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useAuth } from '../App.jsx';
 
-const STATUS_LABELS = { open: 'Abierta', in_progress: 'En proceso', resolved: 'Resuelta', closed: 'Cerrada', rejected: 'Rechazada' };
-const TYPE_LABELS = { request: 'Solicitud', question: 'Pregunta', complaint: 'Queja', suggestion: 'Sugerencia' };
-const PRIORITY_LABELS = { low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' };
+const STATUS_COLORS = { open: '#3b82f6', in_progress: '#f59e0b', resolved: '#10b981', closed: '#6b7280' };
+const STATUS_LABELS = { open: 'Abierta', in_progress: 'En progreso', resolved: 'Resuelta', closed: 'Cerrada' };
 
-export default function RequestDetailPage() {
+export default function RequestDetail() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
-  const [request, setRequest] = useState(null);
+  const [req, setReq] = useState(null);
   const [comments, setComments] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [newComment, setNewComment] = useState('');
+  const [comment, setComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const isStaff = ['admin', 'agent'].includes(user?.role);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, [id]);
+  const fetchData = async () => {
+    const [r, c] = await Promise.all([
+      api.get(`/requests/${id}`),
+      api.get(`/comments?request_id=${id}`)
+    ]);
+    setReq(r); setComments(c);
+  };
 
-  async function loadData() {
-    try {
-      const [req, comms] = await Promise.all([
-        api.get(`/requests/${id}`),
-        api.get(`/comments?request_id=${id}`),
-      ]);
-      setRequest(req);
-      setComments(comms);
-      if (isStaff) {
-        const users = await api.get('/admin/users');
-        setAgents(users.filter(u => ['admin', 'agent'].includes(u.role)));
-      }
-    } catch { navigate('/requests'); }
-  }
+  useEffect(() => { fetchData().finally(() => setLoading(false)); }, [id]);
 
-  async function updateField(field, value) {
-    try {
-      const updated = await api.patch(`/requests/${id}`, { [field]: value });
-      setRequest(r => ({ ...r, ...updated }));
-    } catch(err) { setError(err.message); }
-  }
+  const handleStatus = async (status) => {
+    await api.patch(`/requests/${id}`, { status });
+    fetchData();
+  };
 
-  async function submitComment(e) {
+  const handleComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
-    setSubmitting(true);
-    try {
-      const comment = await api.post('/comments', { request_id: id, content: newComment, is_internal: isInternal });
-      setComments(c => [...c, comment]);
-      setNewComment('');
-    } catch(err) { setError(err.message); }
-    setSubmitting(false);
-  }
+    if (!comment.trim()) return;
+    await api.post('/comments', { request_id: id, content: comment, is_internal: isInternal });
+    setComment('');
+    fetchData();
+  };
 
-  if (!request) return <div style={{textAlign:'center', padding:60}}>Cargando...</div>;
+  const handleDelete = async () => {
+    if (!confirm('¿Eliminar esta solicitud?')) return;
+    await api.delete(`/requests/${id}`);
+    navigate('/requests');
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Cargando...</div>;
+  if (!req) return <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>No encontrado</div>;
+
+  const isStaff = ['admin', 'agent'].includes(profile?.role);
 
   return (
-    <div style={{maxWidth: 800}}>
-      <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:20, fontSize:14, color:'var(--muted)'}}>
-        <Link to="/requests" style={{color:'var(--muted)'}}>← Volver</Link>
-      </div>
-
-      <div className="card" style={{marginBottom:20}}>
-        <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16}}>
-          <div style={{flex:1}}>
-            <h1 style={{fontSize:20, fontWeight:700, marginBottom:8}}>{request.title}</h1>
-            <div style={{display:'flex', gap:8, flexWrap:'wrap'}}>
-              <span className={`badge badge-${request.status}`}>{STATUS_LABELS[request.status]}</span>
-              <span className={`badge badge-${request.priority}`}>{PRIORITY_LABELS[request.priority]}</span>
-              <span className="badge" style={{background:'#f1f5f9', color:'var(--muted)'}}>{TYPE_LABELS[request.type]}</span>
-              {request.category_name && <span className="badge" style={{background:'#f1f5f9', color:'var(--text)'}}>{request.category_icon} {request.category_name}</span>}
+    <div>
+      <button onClick={() => navigate('/requests')} style={s.back}>← Volver</button>
+      <div style={s.layout}>
+        <div style={s.main}>
+          <div style={s.card}>
+            <div style={s.cardHeader}>
+              <h1 style={s.title}>{req.title}</h1>
+              <span style={{ ...s.badge, background: STATUS_COLORS[req.status] + '22', color: STATUS_COLORS[req.status] }}>{STATUS_LABELS[req.status]}</span>
             </div>
+            <p style={s.desc}>{req.description}</p>
           </div>
-        </div>
 
-        <div className="detail-meta">
-          <div className="meta-item"><label>Solicitante</label><span>{request.user_name || request.user_email}</span></div>
-          {request.department && <div className="meta-item"><label>Área</label><span>{request.department}</span></div>}
-          <div className="meta-item"><label>Creada</label><span>{new Date(request.created_at).toLocaleString('es')}</span></div>
-          {request.resolved_at && <div className="meta-item"><label>Resuelta</label><span>{new Date(request.resolved_at).toLocaleString('es')}</span></div>}
-          {request.assigned_name && <div className="meta-item"><label>Asignada a</label><span>{request.assigned_name}</span></div>}
-        </div>
-
-        <div style={{background:'var(--bg)', borderRadius:'var(--radius)', padding:16, whiteSpace:'pre-wrap', fontSize:14}}>
-          {request.description}
-        </div>
-
-        {isStaff && (
-          <div style={{marginTop:16, paddingTop:16, borderTop:'1px solid var(--border)'}}>
-            <h3 style={{fontWeight:600, marginBottom:12, fontSize:14}}>⚙️ Gestión (staff)</h3>
-            <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
-              <div style={{display:'flex', flexDirection:'column', gap:4}}>
-                <label style={{fontSize:12, fontWeight:600, color:'var(--muted)'}}>ESTADO</label>
-                <select value={request.status} onChange={e => updateField('status', e.target.value)}
-                  style={{padding:'6px 10px', border:'1px solid var(--border)', borderRadius:'var(--radius)', fontSize:13}}>
-                  {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              <div style={{display:'flex', flexDirection:'column', gap:4}}>
-                <label style={{fontSize:12, fontWeight:600, color:'var(--muted)'}}>PRIORIDAD</label>
-                <select value={request.priority} onChange={e => updateField('priority', e.target.value)}
-                  style={{padding:'6px 10px', border:'1px solid var(--border)', borderRadius:'var(--radius)', fontSize:13}}>
-                  {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              {agents.length > 0 && (
-                <div style={{display:'flex', flexDirection:'column', gap:4}}>
-                  <label style={{fontSize:12, fontWeight:600, color:'var(--muted)'}}>ASIGNAR A</label>
-                  <select value={request.assigned_to || ''} onChange={e => updateField('assigned_to', e.target.value || null)}
-                    style={{padding:'6px 10px', border:'1px solid var(--border)', borderRadius:'var(--radius)', fontSize:13}}>
-                    <option value="">Sin asignar</option>
-                    {agents.map(a => <option key={a.id} value={a.id}>{a.full_name}</option>)}
-                  </select>
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Comentarios</h2>
+            <div style={s.commentList}>
+              {comments.length === 0 ? <div style={s.empty}>Sin comentarios</div> : comments.map(c => (
+                <div key={c.id} style={{ ...s.comment, ...(c.is_internal ? s.commentInternal : {}) }}>
+                  <div style={s.commentHeader}>
+                    <strong style={{ color: '#1e293b', fontSize: 13 }}>{c.profiles?.full_name || 'Usuario'}</strong>
+                    {c.is_internal && <span style={s.internalTag}>Interno</span>}
+                    <span style={{ color: '#94a3b8', fontSize: 12, marginLeft: 'auto' }}>{new Date(c.created_at).toLocaleString('es-CL')}</span>
+                  </div>
+                  <p style={{ color: '#475569', fontSize: 14, marginTop: 4 }}>{c.content}</p>
                 </div>
+              ))}
+            </div>
+            <form onSubmit={handleComment} style={s.commentForm}>
+              <textarea style={s.commentInput} value={comment} onChange={e => setComment(e.target.value)} placeholder="Escribe un comentario..." rows={3} />
+              {isStaff && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#64748b' }}>
+                  <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} />
+                  Nota interna
+                </label>
               )}
-            </div>
+              <button type="submit" style={s.btnPrimary} disabled={!comment.trim()}>Comentar</button>
+            </form>
           </div>
-        )}
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {/* Historial de estados */}
-      {request.status_history?.length > 0 && (
-        <div className="card" style={{marginBottom:20, padding:16}}>
-          <h3 style={{fontWeight:600, marginBottom:12}}>📋 Historial de estados</h3>
-          {request.status_history.map(h => (
-            <div key={h.id} style={{display:'flex', gap:8, alignItems:'center', padding:'6px 0', borderBottom:'1px solid var(--border)', fontSize:13}}>
-              <span className={`badge badge-${h.old_status}`} style={{minWidth:80, justifyContent:'center'}}>{STATUS_LABELS[h.old_status] || '—'}</span>
-              <span>→</span>
-              <span className={`badge badge-${h.new_status}`} style={{minWidth:80, justifyContent:'center'}}>{STATUS_LABELS[h.new_status]}</span>
-              <span style={{color:'var(--muted)', marginLeft:'auto'}}>{new Date(h.created_at).toLocaleString('es')}</span>
-            </div>
-          ))}
         </div>
-      )}
 
-      {/* Comentarios */}
-      <div className="card">
-        <h3 style={{fontWeight:600, marginBottom:16}}>💬 Comentarios ({comments.length})</h3>
-        {comments.length === 0 && <div style={{color:'var(--muted)', fontSize:14, marginBottom:16}}>Sin comentarios aún.</div>}
-        {comments.map(c => (
-          <div key={c.id} className={`comment ${c.user?.role !== 'user' ? 'comment-staff' : 'comment-user'} ${c.is_internal ? 'comment-internal' : ''}`}>
-            <div className="comment-header">
-              <span className="comment-author">{c.user?.full_name || c.user?.email} {c.is_internal && '🔒'}</span>
-              <span className="comment-time">{new Date(c.created_at).toLocaleString('es')}</span>
+        <div style={s.sidebar}>
+          <div style={s.card}>
+            <h3 style={s.sectionTitle}>Detalles</h3>
+            <div style={s.detail}><span style={s.detailLabel}>Área</span><span>{req.area}</span></div>
+            <div style={s.detail}><span style={s.detailLabel}>Categoría</span><span>{req.category_name}</span></div>
+            <div style={s.detail}><span style={s.detailLabel}>Tipo</span><span style={{ textTransform: 'capitalize' }}>{req.type}</span></div>
+            <div style={s.detail}><span style={s.detailLabel}>Prioridad</span><span style={{ textTransform: 'capitalize' }}>{req.priority}</span></div>
+            <div style={s.detail}><span style={s.detailLabel}>Creada</span><span>{new Date(req.created_at).toLocaleDateString('es-CL')}</span></div>
+            {req.user_full_name && <div style={s.detail}><span style={s.detailLabel}>Por</span><span>{req.user_full_name}</span></div>}
+          </div>
+
+          {isStaff && (
+            <div style={s.card}>
+              <h3 style={s.sectionTitle}>Cambiar estado</h3>
+              <div style={s.statusBtns}>
+                {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                  <button key={key} onClick={() => handleStatus(key)}
+                    style={{ ...s.statusBtn, background: req.status === key ? STATUS_COLORS[key] : '#f1f5f9', color: req.status === key ? '#fff' : '#475569' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="comment-body">{c.content}</div>
-          </div>
-        ))}
+          )}
 
-        <form onSubmit={submitComment} style={{marginTop:16}}>
-          <textarea value={newComment} onChange={e => setNewComment(e.target.value)}
-            placeholder="Escribe un comentario o respuesta..." rows={3}
-            style={{width:'100%', padding:'9px 12px', border:'1px solid var(--border)', borderRadius:'var(--radius)', fontSize:14, marginBottom:8, resize:'vertical'}} />
-          <div style={{display:'flex', alignItems:'center', gap:12}}>
-            <button className="btn btn-primary btn-sm" type="submit" disabled={submitting || !newComment.trim()}>
-              {submitting ? 'Enviando...' : '💬 Comentar'}
-            </button>
-            {isStaff && (
-              <label style={{display:'flex', alignItems:'center', gap:6, fontSize:13, color:'var(--muted)', cursor:'pointer'}}>
-                <input type="checkbox" checked={isInternal} onChange={e => setIsInternal(e.target.checked)} />
-                Nota interna (solo staff)
-              </label>
-            )}
-          </div>
-        </form>
+          {profile?.role === 'admin' && (
+            <button onClick={handleDelete} style={s.deleteBtn}>🗑 Eliminar solicitud</button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+const s = {
+  back: { background: 'none', border: 'none', color: '#2563eb', fontSize: 14, cursor: 'pointer', marginBottom: 20, padding: 0 },
+  layout: { display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' },
+  main: { display: 'flex', flexDirection: 'column', gap: 20 },
+  sidebar: { display: 'flex', flexDirection: 'column', gap: 16 },
+  card: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: 700, color: '#1e3a5f', flex: 1 },
+  badge: { padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' },
+  desc: { color: '#475569', lineHeight: 1.6 },
+  sectionTitle: { fontSize: 15, fontWeight: 700, color: '#1e3a5f', marginBottom: 16 },
+  commentList: { display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 },
+  empty: { color: '#94a3b8', fontSize: 14, textAlign: 'center', padding: 16 },
+  comment: { padding: 14, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' },
+  commentInternal: { background: '#fffbeb', border: '1px solid #fde68a' },
+  commentHeader: { display: 'flex', alignItems: 'center', gap: 8 },
+  internalTag: { fontSize: 10, background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 4, fontWeight: 600 },
+  commentForm: { display: 'flex', flexDirection: 'column', gap: 10 },
+  commentInput: { padding: 12, border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: 14, resize: 'vertical' },
+  btnPrimary: { padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, alignSelf: 'flex-end' },
+  detail: { display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '8px 0', borderBottom: '1px solid #f1f5f9', color: '#1e293b' },
+  detailLabel: { color: '#64748b', fontWeight: 500 },
+  statusBtns: { display: 'flex', flexDirection: 'column', gap: 8 },
+  statusBtn: { padding: '8px 12px', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' },
+  deleteBtn: { width: '100%', padding: 10, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+};

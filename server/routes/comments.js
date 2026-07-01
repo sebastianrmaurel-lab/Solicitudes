@@ -1,64 +1,52 @@
 import { Router } from 'express';
-import { supabase, requireAuth } from '../index.js';
+import { supabaseAdmin, requireAuth } from '../index.js';
 
 const router = Router();
+router.use(requireAuth);
 
-// GET /api/comments?request_id=xxx
-router.get('/', requireAuth, async (req, res) => {
-  const { request_id } = req.query;
-  if (!request_id) return res.status(400).json({ error: 'request_id requerido' });
-
-  const isStaff = ['admin', 'agent'].includes(req.user.profile?.role);
-  let query = supabase
-    .from('comments')
-    .select('*, user:profiles!comments_user_id_fkey(full_name, email, role, avatar_url)')
-    .eq('request_id', request_id)
-    .order('created_at', { ascending: true });
-
-  if (!isStaff) query = query.eq('is_internal', false);
-
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// POST /api/comments
-router.post('/', requireAuth, async (req, res) => {
-  const { request_id, content, is_internal } = req.body;
-  if (!request_id || !content) return res.status(400).json({ error: 'request_id y content requeridos' });
-
-  const isStaff = ['admin', 'agent'].includes(req.user.profile?.role);
-  const { data, error } = await supabase
-    .from('comments')
-    .insert({ request_id, content, user_id: req.user.id, is_internal: isStaff ? !!is_internal : false })
-    .select('*, user:profiles!comments_user_id_fkey(full_name, email, role, avatar_url)')
-    .single();
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  // Notificar al creador de la solicitud
-  const { data: request } = await supabase.from('requests').select('user_id, title').eq('id', request_id).single();
-  if (request && request.user_id !== req.user.id) {
-    await supabase.from('notifications').insert({
-      user_id: request.user_id, request_id,
-      type: 'new_comment', title: 'Nueva respuesta',
-      message: `${req.user.profile?.full_name} respondió tu solicitud "${request.title}"`
-    });
+router.get('/', async (req, res) => {
+  try {
+    const { request_id } = req.query;
+    if (!request_id) return res.status(400).json({ error: 'request_id required' });
+    let query = supabaseAdmin.from('comments').select('*, profiles(full_name,role)').eq('request_id', request_id).order('created_at');
+    if (!['admin','agent'].includes(req.profile.role)) {
+      query = query.eq('is_internal', false);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-
-  res.status(201).json(data);
 });
 
-// DELETE /api/comments/:id
-router.delete('/:id', requireAuth, async (req, res) => {
-  const { data } = await supabase.from('comments').select('user_id').eq('id', req.params.id).single();
-  if (!data) return res.status(404).json({ error: 'No encontrado' });
+router.post('/', async (req, res) => {
+  try {
+    const { request_id, content, is_internal = false } = req.body;
+    const { data, error } = await supabaseAdmin.from('comments').insert({
+      request_id, content,
+      user_id: req.user.id,
+      is_internal: ['admin','agent'].includes(req.profile.role) ? is_internal : false
+    }).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
-  const isAdmin = req.user.profile?.role === 'admin';
-  if (data.user_id !== req.user.id && !isAdmin) return res.status(403).json({ error: 'Acceso denegado' });
-
-  await supabase.from('comments').delete().eq('id', req.params.id);
-  res.json({ success: true });
+router.delete('/:id', async (req, res) => {
+  try {
+    const { data: comment } = await supabaseAdmin.from('comments').select('*').eq('id', req.params.id).single();
+    if (!comment) return res.status(404).json({ error: 'Not found' });
+    if (comment.user_id !== req.user.id && req.profile.role !== 'admin')
+      return res.status(403).json({ error: 'Forbidden' });
+    const { error } = await supabaseAdmin.from('comments').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 export default router;

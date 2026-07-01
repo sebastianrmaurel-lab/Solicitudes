@@ -1,98 +1,87 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useAuth } from '../App.jsx';
 
-const STATUS_LABELS = { open: 'Abierta', in_progress: 'En proceso', resolved: 'Resuelta', closed: 'Cerrada', rejected: 'Rechazada' };
-const TYPE_LABELS = { request: 'Solicitud', question: 'Pregunta', complaint: 'Queja', suggestion: 'Sugerencia' };
+const STATUS_COLORS = { open: '#3b82f6', in_progress: '#f59e0b', resolved: '#10b981', closed: '#6b7280' };
+const STATUS_LABELS = { open: 'Abierta', in_progress: 'En progreso', resolved: 'Resuelta', closed: 'Cerrada' };
 
-export default function DashboardPage() {
-  const { user } = useAuth();
-  const [recent, setRecent] = useState([]);
+export default function Dashboard() {
+  const { profile } = useAuth();
   const [stats, setStats] = useState(null);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const isStaff = ['admin', 'agent'].includes(user?.role);
+  const [recent, setRecent] = useState([]);
 
   useEffect(() => {
-    async function load() {
-      const [reqData, notifData] = await Promise.all([
-        api.get('/requests?limit=5'),
-        api.get('/profiles/notifications'),
-      ]);
-      setRecent(reqData.data || []);
-      setNotifications((notifData || []).filter(n => !n.is_read).slice(0, 5));
-      if (isStaff) {
-        const s = await api.get('/stats');
-        setStats(s);
-      }
-      setLoading(false);
-    }
-    load().catch(() => setLoading(false));
-  }, [isStaff]);
+    api.get('/stats').then(setStats).catch(() => {});
+    api.get('/requests?limit=5').then(r => setRecent(r.data || [])).catch(() => {});
+  }, []);
 
-  if (loading) return <div style={{textAlign:'center',padding:60}}>Cargando...</div>;
+  const cards = stats ? [
+    { label: 'Total', value: stats.total, color: '#1e3a5f', icon: '📄' },
+    { label: 'Abiertas', value: stats.open, color: '#3b82f6', icon: '🔵' },
+    { label: 'En Progreso', value: stats.in_progress, color: '#f59e0b', icon: '🟡' },
+    { label: 'Resueltas', value: stats.resolved, color: '#10b981', icon: '✅' },
+  ] : [];
 
   return (
     <div>
-      <div className="page-header">
+      <div style={s.header}>
         <div>
-          <h1 className="page-title">Bienvenido, {user?.full_name?.split(' ')[0]} 👋</h1>
-          <p className="page-subtitle">Aquí tienes un resumen de tu actividad</p>
+          <h1 style={s.title}>Dashboard</h1>
+          <p style={s.sub}>Bienvenido, {profile?.full_name || 'Usuario'}</p>
         </div>
-        <Link to="/requests/new" className="btn btn-primary">➕ Nueva Solicitud</Link>
+        <Link to="/requests/new" style={s.newBtn}>+ Nueva Solicitud</Link>
       </div>
 
-      {isStaff && stats && (
-        <div className="stats-grid">
-          <div className="stat-card"><div className="stat-number">{stats.total}</div><div className="stat-label">Total</div></div>
-          <div className="stat-card"><div className="stat-number" style={{color:'#1d4ed8'}}>{stats.open}</div><div className="stat-label">Abiertas</div></div>
-          <div className="stat-card"><div className="stat-number" style={{color:'#92400e'}}>{stats.in_progress}</div><div className="stat-label">En proceso</div></div>
-          <div className="stat-card"><div className="stat-number" style={{color:'#065f46'}}>{stats.resolved}</div><div className="stat-label">Resueltas</div></div>
-        </div>
-      )}
-
-      <div style={{display:'grid', gridTemplateColumns: notifications.length ? '1fr 320px' : '1fr', gap: 20}}>
-        <div className="card">
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-            <h2 style={{fontWeight:700}}>Solicitudes recientes</h2>
-            <Link to="/requests" style={{fontSize:13, color:'var(--primary)'}}>Ver todas →</Link>
+      <div style={s.cards}>
+        {cards.map(c => (
+          <div key={c.label} style={{ ...s.card, borderTop: `4px solid ${c.color}` }}>
+            <div style={s.cardIcon}>{c.icon}</div>
+            <div style={{ ...s.cardValue, color: c.color }}>{c.value}</div>
+            <div style={s.cardLabel}>{c.label}</div>
           </div>
-          {recent.length === 0 ? (
-            <div className="empty-state"><div className="icon">📭</div><p>No hay solicitudes aún.<br/><Link to="/requests/new">Crea la primera</Link></p></div>
-          ) : (
-            <table className="table">
-              <thead><tr><th>Título</th><th>Tipo</th><th>Estado</th><th>Fecha</th></tr></thead>
-              <tbody>
-                {recent.map(r => (
-                  <tr key={r.id}>
-                    <td><Link to={`/requests/${r.id}`}>{r.title}</Link></td>
-                    <td style={{color:'var(--muted)', fontSize:13}}>{TYPE_LABELS[r.type]}</td>
-                    <td><span className={`badge badge-${r.status}`}>{STATUS_LABELS[r.status]}</span></td>
-                    <td style={{color:'var(--muted)', fontSize:13}}>{new Date(r.created_at).toLocaleDateString('es')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        ))}
+      </div>
 
-        {notifications.length > 0 && (
-          <div className="card">
-            <h2 style={{fontWeight:700, marginBottom:16}}>🔔 Notificaciones</h2>
-            {notifications.map(n => (
-              <div key={n.id} style={{padding:'10px 0', borderBottom:'1px solid var(--border)'}}>
-                <div style={{fontWeight:600, fontSize:14}}>{n.title}</div>
-                <div style={{fontSize:13, color:'var(--muted)'}}>{n.message}</div>
-                {n.request_id && <Link to={`/requests/${n.request_id}`} style={{fontSize:12, color:'var(--primary)'}}>Ver solicitud →</Link>}
-              </div>
+      <div style={s.section}>
+        <h2 style={s.sectionTitle}>Solicitudes recientes</h2>
+        {recent.length === 0 ? (
+          <div style={s.empty}>No hay solicitudes aún. <Link to="/requests/new" style={{ color: '#2563eb' }}>Crear una</Link></div>
+        ) : (
+          <div style={s.list}>
+            {recent.map(r => (
+              <Link key={r.id} to={`/requests/${r.id}`} style={s.item}>
+                <div style={s.itemTitle}>{r.title}</div>
+                <div style={s.itemMeta}>
+                  <span style={{ ...s.badge, background: STATUS_COLORS[r.status] + '22', color: STATUS_COLORS[r.status] }}>{STATUS_LABELS[r.status]}</span>
+                  <span style={s.date}>{new Date(r.created_at).toLocaleDateString('es-CL')}</span>
+                </div>
+              </Link>
             ))}
-            <button className="btn btn-outline btn-sm" style={{marginTop:12}} onClick={() => api.patch('/profiles/notifications/read', {})}>
-              Marcar todas como leídas
-            </button>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+const s = {
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: 700, color: '#1e3a5f' },
+  sub: { color: '#64748b', marginTop: 4 },
+  newBtn: { background: '#2563eb', color: '#fff', padding: '10px 20px', borderRadius: 8, fontWeight: 600, fontSize: 14 },
+  cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20, marginBottom: 32 },
+  card: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', textAlign: 'center' },
+  cardIcon: { fontSize: 28, marginBottom: 8 },
+  cardValue: { fontSize: 36, fontWeight: 700 },
+  cardLabel: { color: '#64748b', fontSize: 13, marginTop: 4 },
+  section: { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  sectionTitle: { fontSize: 18, fontWeight: 600, color: '#1e3a5f', marginBottom: 16 },
+  empty: { color: '#64748b', textAlign: 'center', padding: 32 },
+  list: { display: 'flex', flexDirection: 'column', gap: 8 },
+  item: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderRadius: 8, border: '1px solid #e2e8f0', transition: 'background 0.2s' },
+  itemTitle: { fontWeight: 500, color: '#1e293b' },
+  itemMeta: { display: 'flex', alignItems: 'center', gap: 12 },
+  badge: { padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 },
+  date: { color: '#94a3b8', fontSize: 12 },
+};

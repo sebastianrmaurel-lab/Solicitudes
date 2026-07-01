@@ -12,15 +12,6 @@ export async function signIn(email, password) {
   return data;
 }
 
-export async function signUp(email, password, fullName) {
-  const { data, error } = await supabase.auth.signUp({
-    email, password,
-    options: { data: { full_name: fullName } }
-  });
-  if (error) throw error;
-  return data;
-}
-
 export async function signOut() {
   await supabase.auth.signOut();
   localStorage.removeItem('sb-token');
@@ -28,8 +19,5 @@ export async function signOut() {
 
 export async function getSession() {
   const { data } = await supabase.auth.getSession();
-  if (data.session) {
-    localStorage.setItem('sb-token', data.session.access_token);
-  }
   return data.session;
 }
